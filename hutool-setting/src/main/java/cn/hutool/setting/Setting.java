@@ -4,7 +4,6 @@ import java.io.File;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
-import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -23,6 +22,7 @@ import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.io.resource.UrlResource;
 import cn.hutool.core.io.watch.SimpleWatcher;
 import cn.hutool.core.io.watch.WatchMonitor;
+import cn.hutool.core.io.watch.WatchUtil;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.CharUtil;
 import cn.hutool.core.util.CharsetUtil;
@@ -179,20 +179,18 @@ public class Setting extends AbsSetting implements Map<String, String> {
 	 */
 	public void autoLoad(boolean autoReload) {
 		if (autoReload) {
+			Assert.notNull(this.settingUrl, "Setting URL is null !");
 			if (null != this.watchMonitor) {
+				// 先关闭之前的监听
 				this.watchMonitor.close();
 			}
-			try {
-				watchMonitor = WatchMonitor.create(this.settingUrl, StandardWatchEventKinds.ENTRY_MODIFY);
-				watchMonitor.setWatcher(new SimpleWatcher() {
-					@Override
-					public void onModify(WatchEvent<?> event, Path currentPath) {
-						load();
-					}
-				}).start();
-			} catch (Exception e) {
-				throw new SettingRuntimeException(e, "Setting auto load not support url: [{}]", this.settingUrl);
-			}
+			this.watchMonitor = WatchUtil.createModify(this.settingUrl, new SimpleWatcher() {
+				@Override
+				public void onModify(WatchEvent<?> event, Path currentPath) {
+					load();
+				}
+			});
+			this.watchMonitor.start();
 			StaticLog.debug("Auto load for [{}] listenning...", this.settingUrl);
 		} else {
 			IoUtil.close(this.watchMonitor);
@@ -487,7 +485,7 @@ public class Setting extends AbsSetting implements Map<String, String> {
 	public Set<Entry<String, String>> entrySet(String group) {
 		return this.groupedMap.entrySet(group);
 	}
-
+	
 	/**
 	 * 设置值
 	 * 
@@ -497,7 +495,20 @@ public class Setting extends AbsSetting implements Map<String, String> {
 	 * @since 3.3.1
 	 */
 	public Setting set(String key, String value) {
-		this.groupedMap.put(DEFAULT_GROUP, key, value);
+		this.put(key, value);
+		return this;
+	}
+	
+	/**
+	 * 将键值对加入到对应分组中
+	 * 
+	 * @param group 分组
+	 * @param key 键
+	 * @param value 值
+	 * @return 此key之前存在的值，如果没有返回null
+	 */
+	public Setting set(String group, String key, String value) {
+		this.put(group, key, value);
 		return this;
 	}
 
@@ -638,14 +649,14 @@ public class Setting extends AbsSetting implements Map<String, String> {
 			if (other.charset != null) {
 				return false;
 			}
-		} else if (!charset.equals(other.charset)) {
+		} else if (false == charset.equals(other.charset)) {
 			return false;
 		}
 		if (groupedMap == null) {
 			if (other.groupedMap != null) {
 				return false;
 			}
-		} else if (!groupedMap.equals(other.groupedMap)) {
+		} else if (false == groupedMap.equals(other.groupedMap)) {
 			return false;
 		}
 		if (isUseVariable != other.isUseVariable) {

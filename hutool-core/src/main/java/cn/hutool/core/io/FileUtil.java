@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.net.URI;
 import java.net.URL;
@@ -44,10 +45,12 @@ import java.util.zip.Checksum;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.file.FileCopier;
+import cn.hutool.core.io.file.FileMode;
 import cn.hutool.core.io.file.FileReader;
 import cn.hutool.core.io.file.FileReader.ReaderHandler;
 import cn.hutool.core.io.file.FileWriter;
 import cn.hutool.core.io.file.LineSeparator;
+import cn.hutool.core.io.file.Tailer;
 import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.ArrayUtil;
@@ -696,7 +699,7 @@ public class FileUtil {
 	 */
 	public static boolean del(File file) throws IORuntimeException {
 		if (file == null || false == file.exists()) {
-			//如果文件不存在或已被删除，此处返回true表示删除成功
+			// 如果文件不存在或已被删除，此处返回true表示删除成功
 			return true;
 		}
 
@@ -793,6 +796,32 @@ public class FileUtil {
 				// 删除一个出错则本次删除任务失败
 				return false;
 			}
+		}
+		return true;
+	}
+	
+	/**
+	 * 清理空文件夹<br>
+	 * 此方法用于递归删除空的文件夹，不删除文件<br>
+	 * 如果传入的文件夹本身就是空的，删除这个文件夹
+	 * 
+	 * @param directory 文件夹
+	 * @return 成功与否
+	 * @throws IORuntimeException IO异常
+	 * @since 4.5.5
+	 */
+	public static boolean cleanEmpty(File directory) throws IORuntimeException {
+		if (directory == null || directory.exists() == false || false == directory.isDirectory()) {
+			return true;
+		}
+
+		final File[] files = directory.listFiles();
+		if(ArrayUtil.isEmpty(files)) {
+			//空文件夹则删除之
+			directory.delete();
+		}
+		for (File childFile : files) {
+			clean(childFile);
 		}
 		return true;
 	}
@@ -1051,7 +1080,7 @@ public class FileUtil {
 			} catch (Exception e) {
 				throw new IORuntimeException(StrUtil.format("Move [{}] to [{}] failed!", src, dest), e);
 			}
-			//复制后删除源
+			// 复制后删除源
 			del(src);
 		}
 	}
@@ -1501,11 +1530,11 @@ public class FileUtil {
 		}
 
 		// 兼容Spring风格的ClassPath路径，去除前缀，不区分大小写
-		String pathToUse = StrUtil.removePrefixIgnoreCase(path, "classpath:");
+		String pathToUse = StrUtil.removePrefixIgnoreCase(path, URLUtil.CLASSPATH_URL_PREFIX);
 		// 去除file:前缀
-		pathToUse = StrUtil.removePrefixIgnoreCase(pathToUse, "file:");
+		pathToUse = StrUtil.removePrefixIgnoreCase(pathToUse, URLUtil.FILE_URL_PREFIX);
 		// 统一使用斜杠
-		pathToUse = pathToUse.replaceAll("[/\\\\]{1,}", "/").trim();
+		pathToUse = pathToUse.replaceAll("[/\\\\]{1,}", StrUtil.SLASH).trim();
 
 		int prefixIndex = pathToUse.indexOf(StrUtil.COLON);
 		String prefix = "";
@@ -1516,7 +1545,7 @@ public class FileUtil {
 				// 去除类似于/C:这类路径开头的斜杠
 				prefix = prefix.substring(1);
 			}
-			if (false == prefix.contains("/")) {
+			if (false == prefix.contains(StrUtil.SLASH)) {
 				pathToUse = pathToUse.substring(prefixIndex + 1);
 			} else {
 				// 如果前缀中包含/,说明非Windows风格path
@@ -2385,6 +2414,47 @@ public class FileUtil {
 	 */
 	public static void readLines(File file, Charset charset, LineHandler lineHandler) throws IORuntimeException {
 		FileReader.create(file, charset).readLines(lineHandler);
+	}
+
+	/**
+	 * 按行处理文件内容
+	 * 
+	 * @param file {@link RandomAccessFile}文件
+	 * @param charset 编码
+	 * @param lineHandler {@link LineHandler}行处理器
+	 * @throws IORuntimeException IO异常
+	 * @since 4.5.2
+	 */
+	public static void readLines(RandomAccessFile file, Charset charset, LineHandler lineHandler) {
+		String line = null;
+		try {
+			while ((line = file.readLine()) != null) {
+				lineHandler.handle(CharsetUtil.convert(line, CharsetUtil.CHARSET_ISO_8859_1, charset));
+			}
+		} catch (IOException e) {
+			throw new IORuntimeException(e);
+		}
+	}
+	
+	/**
+	 * 单行处理文件内容
+	 * 
+	 * @param file {@link RandomAccessFile}文件
+	 * @param charset 编码
+	 * @param lineHandler {@link LineHandler}行处理器
+	 * @throws IORuntimeException IO异常
+	 * @since 4.5.2
+	 */
+	public static void readLine(RandomAccessFile file, Charset charset, LineHandler lineHandler) {
+		String line = null;
+		try {
+			line = file.readLine();
+		} catch (IOException e) {
+			throw new IORuntimeException(e);
+		}
+		if(null != line) {
+			lineHandler.handle(CharsetUtil.convert(line, CharsetUtil.CHARSET_ISO_8859_1, charset));
+		}
 	}
 
 	/**
@@ -3348,5 +3418,81 @@ public class FileUtil {
 	 */
 	public static boolean isSymlink(File file) throws IORuntimeException {
 		return Files.isSymbolicLink(file.toPath());
+	}
+	
+	/**
+	 * 判断给定的目录是否为给定文件或文件夹的父目录
+	 * 
+	 * @param parent 父目录
+	 * @param sub 子目录
+	 * @return 子目录是否为父目录的子目录
+	 * @since 4.5.4
+	 */
+	public static boolean isSub(File parent, File sub) {
+		Assert.notNull(parent);
+		Assert.notNull(sub);
+		return sub.toPath().startsWith(parent.toPath());
+	}
+
+	/**
+	 * 创建{@link RandomAccessFile}
+	 * 
+	 * @param path 文件Path
+	 * @param mode 模式，见{@link FileMode}
+	 * @return {@link RandomAccessFile}
+	 * @since 4.5.2
+	 */
+	public static RandomAccessFile createRandomAccessFile(Path path, FileMode mode) {
+		return createRandomAccessFile(path.toFile(), mode);
+	}
+
+	/**
+	 * 创建{@link RandomAccessFile}
+	 * 
+	 * @param file 文件
+	 * @param mode 模式，见{@link FileMode}
+	 * @return {@link RandomAccessFile}
+	 * @since 4.5.2
+	 */
+	public static RandomAccessFile createRandomAccessFile(File file, FileMode mode) {
+		try {
+			return new RandomAccessFile(file, mode.name());
+		} catch (FileNotFoundException e) {
+			throw new IORuntimeException(e);
+		}
+	}
+
+	/**
+	 * 文件内容跟随器，实现类似Linux下"tail -f"命令功能<br>
+	 * 此方法会阻塞当前线程
+	 * 
+	 * @param file 文件
+	 * @param handler 行处理器
+	 */
+	public static void tail(File file, LineHandler handler) {
+		tail(file, CharsetUtil.CHARSET_UTF_8, handler);
+	}
+
+	/**
+	 * 文件内容跟随器，实现类似Linux下"tail -f"命令功能<br>
+	 * 此方法会阻塞当前线程
+	 * 
+	 * @param file 文件
+	 * @param charset 编码
+	 * @param handler 行处理器
+	 */
+	public static void tail(File file, Charset charset, LineHandler handler) {
+		new Tailer(file, charset, handler).start();
+	}
+
+	/**
+	 * 文件内容跟随器，实现类似Linux下"tail -f"命令功能<br>
+	 * 此方法会阻塞当前线程
+	 * 
+	 * @param file 文件
+	 * @param charset 编码
+	 */
+	public static void tail(File file, Charset charset) {
+		FileUtil.tail(file, charset, Tailer.CONSOLE_HANDLER);
 	}
 }

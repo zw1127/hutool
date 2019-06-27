@@ -15,7 +15,7 @@ import cn.hutool.http.HttpUtil;
  * @author looly
  */
 public class DownloadTest {
-	
+
 	@Test
 	@Ignore
 	public void downloadPicTest() {
@@ -23,21 +23,18 @@ public class DownloadTest {
 		HttpUtil.downloadFile(url, "e:/pic/t3.jpg");
 		Console.log("ok");
 	}
-	
+
 	@Test
 	@Ignore
 	public void downloadSizeTest() {
 		String url = "https://res.t-io.org/im/upload/img/67/8948/1119501/88097554/74541310922/85/231910/366466 - 副本.jpg";
-		HttpRequest
-				.get(url)
-				.setSSLProtocol("TLSv1.2")
-				.executeAsync().writeBody("e:/pic/366466.jpg");
+		HttpRequest.get(url).setSSLProtocol("TLSv1.2").executeAsync().writeBody("e:/pic/366466.jpg");
 	}
-	
+
 	@Test
 	@Ignore
 	public void downloadTest1() {
-		long size = HttpUtil.downloadFile("http://explorer.bbfriend.com/crossdomain.xml", "d:/");
+		long size = HttpUtil.downloadFile("http://explorer.bbfriend.com/crossdomain.xml", "e:/temp/");
 		System.out.println("Download size: " + size);
 	}
 
@@ -45,7 +42,7 @@ public class DownloadTest {
 	@Ignore
 	public void downloadTest() {
 		// 带进度显示的文件下载
-		HttpUtil.downloadFile("http://mirrors.sohu.com/centos/7/isos/x86_64/CentOS-7-x86_64-NetInstall-1708.iso", FileUtil.file("d:/"), new StreamProgress() {
+		HttpUtil.downloadFile("http://mirrors.sohu.com/centos/7/isos/x86_64/CentOS-7-x86_64-NetInstall-1804.iso", FileUtil.file("d:/"), new StreamProgress() {
 
 			long time = System.currentTimeMillis();
 

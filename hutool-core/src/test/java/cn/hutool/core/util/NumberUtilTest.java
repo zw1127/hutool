@@ -39,6 +39,12 @@ public class NumberUtilTest {
 	}
 	
 	@Test
+	public void addTest4() {
+		BigDecimal result = NumberUtil.add(new BigDecimal("133"), new BigDecimal("331"));
+		Assert.assertEquals(new BigDecimal("464"), result);
+	}
+	
+	@Test
 	public void isIntegerTest() {
 		Assert.assertTrue(NumberUtil.isInteger("-12"));
 		Assert.assertTrue(NumberUtil.isInteger("256"));
@@ -147,6 +153,18 @@ public class NumberUtilTest {
 
 		String format = NumberUtil.decimalFormat(",###", c);
 		Assert.assertEquals("299,792,458", format);
+	}
+	
+	@Test
+	public void decimalFormatMoneyTest() {
+		double c = 299792400.543534534;
+		
+		String format = NumberUtil.decimalFormatMoney(c);
+		Assert.assertEquals("299,792,400.54", format);
+		
+		double value = 0.5;
+		String money = NumberUtil.decimalFormatMoney(value);
+		Assert.assertEquals("0.50", money);
 	}
 
 	@Test

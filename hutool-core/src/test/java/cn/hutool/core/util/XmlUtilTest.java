@@ -20,6 +20,10 @@ import cn.hutool.core.map.MapUtil;
  *
  */
 public class XmlUtilTest {
+	
+	@Test
+	public void buildTest() {
+	}
 
 	@Test
 	public void parseTest() {
@@ -106,7 +110,7 @@ public class XmlUtilTest {
 				+ "</user>", //
 				XmlUtil.toStr(doc, false));
 	}
-
+	
 	@Test
 	public void readTest() {
 		Document doc = XmlUtil.readXML("test.xml");

@@ -77,8 +77,7 @@ public class CollectionConverter implements Converter<Collection<?>> {
 	 * @return 转换后的集合对象
 	 */
 	protected Collection<?> convertInternal(Object value) {
-		final Collection<Object> collection = CollectionUtil.create(TypeUtil.getClass(collectionType));
-		Type eleType = this.elementType;
-		return CollUtil.addAll(collection, value, eleType);
+		final Collection<Object> collection = CollectionUtil.create(TypeUtil.getClass(this.collectionType));
+		return CollUtil.addAll(collection, value, this.elementType);
 	}
 }

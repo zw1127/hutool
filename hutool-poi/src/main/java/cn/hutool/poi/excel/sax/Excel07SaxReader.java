@@ -168,6 +168,7 @@ public class Excel07SaxReader extends AbstractExcelSaxReader<Excel07SaxReader> i
 			throw ExceptionUtil.wrap(e, POIException.class);
 		} finally {
 			IoUtil.close(sheetInputStream);
+			IoUtil.close(opcPackage);
 		}
 		return this;
 	}
@@ -237,7 +238,7 @@ public class Excel07SaxReader extends AbstractExcelSaxReader<Excel07SaxReader> i
 
 		if (T_ELEMENT.equals(qName)) {
 			// type标签
-			rowCellList.add(curCell++, contentStr);
+			// rowCellList.add(curCell++, contentStr);
 		} else if (C_ELEMENT.equals(qName)) {
 			// cell标签
 			Object value = ExcelSaxUtil.getDataValue(this.cellDataType, contentStr, this.sharedStringsTable, this.numFmtString);

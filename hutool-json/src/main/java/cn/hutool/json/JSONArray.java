@@ -8,12 +8,14 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.RandomAccess;
 
 import cn.hutool.core.bean.BeanPath;
 import cn.hutool.core.collection.ArrayIter;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.CharUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 
 /**
  * JSON数组<br>
@@ -26,7 +28,7 @@ import cn.hutool.core.util.ObjectUtil;
  * 
  * @author looly
  */
-public class JSONArray extends JSONGetter<Integer> implements JSON, List<Object> {
+public class JSONArray extends JSONGetter<Integer> implements JSON, List<Object>, RandomAccess {
 	private static final long serialVersionUID = 2664900568717612292L;
 
 	/** 默认初始大小 */
@@ -397,7 +399,7 @@ public class JSONArray extends JSONGetter<Integer> implements JSON, List<Object>
 		}
 		if (index < this.size()) {
 			InternalJSONUtil.testValidity(element);
-			this.rawList.set(index, JSONUtil.wrap(element, this.config.isIgnoreNullValue()));
+			this.rawList.add(index, JSONUtil.wrap(element, this.config.isIgnoreNullValue()));
 		} else {
 			while (index != this.size()) {
 				this.add(JSONNull.NULL);
@@ -584,7 +586,7 @@ public class JSONArray extends JSONGetter<Integer> implements JSON, List<Object>
 	 */
 	private void init(CharSequence source) {
 		if (null != source) {
-			init(new JSONTokener(source.toString()));
+			init(new JSONTokener(StrUtil.trim(source)));
 		}
 	}
 

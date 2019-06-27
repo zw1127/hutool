@@ -53,7 +53,7 @@ public class Sign extends BaseAsymmetric<Sign> {
 	 * @param publicKeyStr 公钥Hex或Base64表示
 	 */
 	public Sign(SignAlgorithm algorithm, String privateKeyStr, String publicKeyStr) {
-		this(algorithm.getValue(), SecureUtil.decodeKey(privateKeyStr), SecureUtil.decodeKey(publicKeyStr));
+		this(algorithm.getValue(), SecureUtil.decode(privateKeyStr), SecureUtil.decode(publicKeyStr));
 	}
 
 	/**
@@ -236,7 +236,7 @@ public class Sign extends BaseAsymmetric<Sign> {
 		// If the certificate is of type X509Certificate,
 		// we should check whether it has a Key Usage
 		// extension marked as critical.
-		if (certificate instanceof java.security.cert.X509Certificate) {
+		if (certificate instanceof X509Certificate) {
 			// Check whether the cert has a key usage extension
 			// marked as a critical extension.
 			// The OID for KeyUsage extension is 2.5.29.15.

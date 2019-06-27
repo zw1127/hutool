@@ -40,12 +40,12 @@ public class QrCodeUtilTest {
 	public void generateWithLogoTest() {
 		QrCodeUtil.generate(//
 				"http://hutool.cn/", //
-				QrConfig.create().setImg("e:/logo_small.jpg"), //
+				QrConfig.create().setImg("e:/pic/face.jpg"), //
 				FileUtil.file("e:/qrcodeWithLogo.jpg"));
 	}
 
 	@Test
-//	@Ignore
+	@Ignore
 	public void decodeTest() {
 		String decode = QrCodeUtil.decode(FileUtil.file("e:/pic/qr.png"));
 		Console.log(decode);

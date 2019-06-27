@@ -4,9 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.CookieHandler;
 import java.net.CookieManager;
-import java.net.CookiePolicy;
 import java.net.HttpCookie;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
@@ -36,7 +34,7 @@ import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.URLUtil;
-import cn.hutool.http.cookie.ThreadLocalCookieStore;
+import cn.hutool.http.cookie.GlobalCookieManager;
 import cn.hutool.http.ssl.SSLSocketFactoryBuilder;
 import cn.hutool.json.JSON;
 import cn.hutool.log.StaticLog;
@@ -57,42 +55,48 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	private static final String CONTENT_DISPOSITION_TEMPLATE = "Content-Disposition: form-data; name=\"{}\"\r\n\r\n";
 	private static final String CONTENT_DISPOSITION_FILE_TEMPLATE = "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n";
 
-	private static final String CONTENT_TYPE_X_WWW_FORM_URLENCODED_PREFIX = "application/x-www-form-urlencoded;charset=";
 	private static final String CONTENT_TYPE_MULTIPART_PREFIX = "multipart/form-data; boundary=";
 	private static final String CONTENT_TYPE_FILE_TEMPLATE = "Content-Type: {}\r\n\r\n";
-
-	/** Cookie管理 */
-	protected static CookieManager cookieManager;
-	static {
-		cookieManager = new CookieManager(new ThreadLocalCookieStore(), CookiePolicy.ACCEPT_ALL);
-		CookieHandler.setDefault(cookieManager);
-	}
 
 	/**
 	 * 获取Cookie管理器，用于自定义Cookie管理
 	 * 
 	 * @return {@link CookieManager}
 	 * @since 4.1.0
+	 * @see GlobalCookieManager#getCookieManager()
 	 */
 	public static CookieManager getCookieManager() {
-		return cookieManager;
+		return GlobalCookieManager.getCookieManager();
+	}
+
+	/**
+	 * 自定义{@link CookieManager}
+	 * 
+	 * @param customCookieManager 自定义的{@link CookieManager}
+	 * @since 4.5.14
+	 * @see GlobalCookieManager#setCookieManager(CookieManager)
+	 */
+	public static void setCookieManager(CookieManager customCookieManager) {
+		GlobalCookieManager.setCookieManager(customCookieManager);
 	}
 
 	/**
 	 * 关闭Cookie
 	 * 
 	 * @since 4.1.9
+	 * @see GlobalCookieManager#setCookieManager(CookieManager)
 	 */
 	public static void closeCookie() {
-		cookieManager = null;
-		CookieHandler.setDefault(null);
+		GlobalCookieManager.setCookieManager(null);
 	}
 
 	private String url;
 	private URLStreamHandler urlHandler;
 	private Method method = Method.GET;
-	/** 默认超时 */
-	private int timeout = TIMEOUT_DEFAULT;
+	/** 默认连接超时 */
+	private int connectionTimeout = TIMEOUT_DEFAULT;
+	/** 默认读取超时 */
+	private int readTimeout = TIMEOUT_DEFAULT;
 	/** 存储表单数据 */
 	private Map<String, Object> form;
 	/** 文件表单对象，用于文件上传 */
@@ -239,13 +243,13 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	/**
 	 * 设置{@link URLStreamHandler}
 	 * <p>
-	 * 部分环境下需要单独设置此项，例如当 WebLogic Server 实例充当 SSL 客户端角色（它会尝试通过 SSL 连接到其他服务器或应用程序）时，它会验证 SSL 服务器在数字证书中返回的主机名是否与用于连接 SSL 服务器的 URL 主机名相匹配。<br>
-	 * 如果主机名不匹配，则删除此连接。<br>
+	 * 部分环境下需要单独设置此项，例如当 WebLogic Server 实例充当 SSL 客户端角色（它会尝试通过 SSL 连接到其他服务器或应用程序）时，<br>
+	 * 它会验证 SSL 服务器在数字证书中返回的主机名是否与用于连接 SSL 服务器的 URL 主机名相匹配。如果主机名不匹配，则删除此连接。<br>
 	 * 因此weblogic不支持https的sni协议的主机名验证，此时需要将此值设置为sun.net.www.protocol.https.Handler对象。
 	 * <p>
 	 * 相关issue见：https://gitee.com/loolly/hutool/issues/IMD1X
 	 * 
-	 * @param urlHandler url字符串
+	 * @param urlHandler {@link URLStreamHandler}
 	 * @since 4.1.9
 	 */
 	public HttpRequest setUrlHandler(URLStreamHandler urlHandler) {
@@ -613,7 +617,7 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	 * </pre>
 	 * 
 	 * @param body 请求体
-	 * @param contentType 请求体类型
+	 * @param contentType 请求体类型，{@code null}表示自动判断类型
 	 * @return this
 	 */
 	public HttpRequest body(String body, String contentType) {
@@ -630,7 +634,7 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 			if (null != contentType && ContentType.isDefault(this.header(Header.CONTENT_TYPE))) {
 				if (null != this.charset) {
 					// 附加编码信息
-					contentType = StrUtil.format("{};charset={}", contentType, this.charset.name());
+					contentType = ContentType.build(contentType, this.charset);
 				}
 				this.contentType(contentType);
 			}
@@ -668,13 +672,46 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	// ---------------------------------------------------------------- Body end
 
 	/**
-	 * 设置超时，单位：毫秒
+	 * 设置超时，单位：毫秒<br>
+	 * 超时包括：
+	 * 
+	 * <pre>
+	 * 1. 连接超时
+	 * 2. 读取响应超时
+	 * </pre>
 	 * 
 	 * @param milliseconds 超时毫秒数
 	 * @return this
+	 * @see #setConnectionTimeout(int)
+	 * @see #setReadTimeout(int)
 	 */
 	public HttpRequest timeout(int milliseconds) {
-		this.timeout = milliseconds;
+		setConnectionTimeout(milliseconds);
+		setReadTimeout(milliseconds);
+		return this;
+	}
+
+	/**
+	 * 设置连接超时，单位：毫秒
+	 * 
+	 * @param milliseconds 超时毫秒数
+	 * @return this
+	 * @since 4.5.6
+	 */
+	public HttpRequest setConnectionTimeout(int milliseconds) {
+		this.connectionTimeout = milliseconds;
+		return this;
+	}
+
+	/**
+	 * 设置连接超时，单位：毫秒
+	 * 
+	 * @param milliseconds 超时毫秒数
+	 * @return this
+	 * @since 4.5.6
+	 */
+	public HttpRequest setReadTimeout(int milliseconds) {
+		this.readTimeout = milliseconds;
 		return this;
 	}
 
@@ -830,6 +867,10 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	public HttpResponse execute(boolean isAsync) {
 		// 初始化URL
 		urlWithParamIfGet();
+		// 编码URL
+		if (this.encodeUrlParams) {
+			this.url = HttpUtil.encodeParams(this.url, this.charset);
+		}
 		// 初始化 connection
 		initConnecton();
 
@@ -867,34 +908,38 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	 * 初始化网络连接
 	 */
 	private void initConnecton() {
-		// 初始化 connection
-		this.httpConnection = HttpConnection.create(URLUtil.toUrlForHttp(this.url, this.urlHandler), this.method, this.hostnameVerifier, this.ssf, this.timeout, this.proxy)//
-				.header(this.headers, true); // 覆盖默认Header
-
-		// 自定义Cookie
-		if (null != this.cookie) {
-			this.httpConnection.setCookie(this.cookie);
-		}
+		this.httpConnection = HttpConnection.create(URLUtil.toUrlForHttp(this.url, this.urlHandler), this.proxy)//
+				.setMethod(this.method)//
+				.setHttpsInfo(this.hostnameVerifier, this.ssf)//
+				.setConnectTimeout(this.connectionTimeout)//
+				.setReadTimeout(this.readTimeout)//
+				// 自定义Cookie
+				.setCookie(this.cookie)
+				// 定义转发
+				.setInstanceFollowRedirects(this.maxRedirectCount > 0 ? true : false)
+				// 覆盖默认Header
+				.header(this.headers, true);
+		
+		// 读取全局Cookie信息并附带到请求中
+		GlobalCookieManager.add(this.httpConnection);
 
 		// 是否禁用缓存
 		if (this.isDisableCache) {
 			this.httpConnection.disableCache();
 		}
-
-		// 定义转发
-		this.httpConnection.setInstanceFollowRedirects(maxRedirectCount > 0 ? true : false);
 	}
 
 	/**
-	 * 对于GET请求将参数加到URL中
+	 * 对于GET请求将参数加到URL中<br>
+	 * 此处不对URL中的特殊字符做单独编码
 	 */
 	private void urlWithParamIfGet() {
 		if (Method.GET.equals(method) && false == this.isRest) {
 			// 优先使用body形式的参数，不存在使用form
 			if (ArrayUtil.isNotEmpty(this.bodyBytes)) {
-				this.url = HttpUtil.urlWithForm(this.url, StrUtil.str(this.bodyBytes, this.charset), this.charset, this.encodeUrlParams);
+				this.url = HttpUtil.urlWithForm(this.url, StrUtil.str(this.bodyBytes, this.charset), this.charset, false);
 			} else {
-				this.url = HttpUtil.urlWithForm(this.url, this.form, this.charset, this.encodeUrlParams);
+				this.url = HttpUtil.urlWithForm(this.url, this.form, this.charset, false);
 			}
 		}
 	}
@@ -962,7 +1007,7 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 	private void sendFormUrlEncoded() throws IOException {
 		if (StrUtil.isBlank(this.header(Header.CONTENT_TYPE))) {
 			// 如果未自定义Content-Type，使用默认的application/x-www-form-urlencoded
-			this.httpConnection.header(Header.CONTENT_TYPE, CONTENT_TYPE_X_WWW_FORM_URLENCODED_PREFIX + this.charset, true);
+			this.httpConnection.header(Header.CONTENT_TYPE, ContentType.FORM_URLENCODED.toString(this.charset), true);
 		}
 
 		// Write的时候会优先使用body中的内容，write时自动关闭OutputStream
@@ -1042,8 +1087,9 @@ public class HttpRequest extends HttpBase<HttpRequest> {
 		} else {
 			// 普通资源
 			final StringBuilder builder = StrUtil.builder().append("--").append(BOUNDARY).append(StrUtil.CRLF);
-			builder.append(StrUtil.format(CONTENT_DISPOSITION_FILE_TEMPLATE, formFieldName, resource.getName()));
-			builder.append(StrUtil.format(CONTENT_TYPE_FILE_TEMPLATE, HttpUtil.getMimeType(resource.getName())));
+			final String fileName = resource.getName();
+			builder.append(StrUtil.format(CONTENT_DISPOSITION_FILE_TEMPLATE, formFieldName, ObjectUtil.defaultIfNull(fileName, formFieldName)));
+			builder.append(StrUtil.format(CONTENT_TYPE_FILE_TEMPLATE, HttpUtil.getMimeType(fileName)));
 			IoUtil.write(out, this.charset, false, builder);
 			InputStream in = null;
 			try {
